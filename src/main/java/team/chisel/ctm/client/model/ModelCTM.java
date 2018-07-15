@@ -60,7 +60,6 @@ public class ModelCTM implements IModelCTM {
     private final ModelBlock modelinfo;
 
     // Populated from overrides data during construction
-    @Nullable private final JsonElement defaultOverride;
     private final Int2ObjectMap<JsonElement> overrides;
     private final Collection<ResourceLocation> textureDependencies;
 
@@ -82,8 +81,6 @@ public class ModelCTM implements IModelCTM {
 
         this.textureDependencies = new HashSet<>();
         this.textureDependencies.addAll(vanillamodel.getTextures());
-
-        this.defaultOverride = overrides.get(-1);
 
         for (Entry<Integer, JsonElement> e : this.overrides.entrySet()) {
             IMetadataSectionCTM meta = getMetadataFromElement(e.getValue());
