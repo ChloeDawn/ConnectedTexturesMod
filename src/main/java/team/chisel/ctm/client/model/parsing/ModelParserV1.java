@@ -3,6 +3,7 @@ package team.chisel.ctm.client.model.parsing;
 import com.google.gson.Gson;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
+import com.google.gson.JsonParseException;
 import com.google.gson.reflect.TypeToken;
 import it.unimi.dsi.fastutil.ints.Int2ObjectArrayMap;
 import it.unimi.dsi.fastutil.ints.Int2ObjectMap;
@@ -55,7 +56,7 @@ public class ModelParserV1 implements IModelParser {
             if ("*".equals(e.getKey())) {
                 if (defaultReplacement == null) {
                     defaultReplacement = e.getValue();
-                } else throw new IllegalStateException("Cannot have more than one wildcard override in ctm_overrides");
+                } else throw new JsonParseException("Cannot have more than one wildcard override in ctm_overrides");
             }
             try {
                 int index = Integer.parseInt(e.getKey());
