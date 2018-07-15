@@ -18,7 +18,6 @@ import team.chisel.ctm.api.model.IModelParser;
 import team.chisel.ctm.client.model.ModelCTM;
 
 import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
 import java.util.Collections;
 import java.util.Map;
 import java.util.Map.Entry;
@@ -50,19 +49,20 @@ public class ModelParserV1 implements IModelParser {
         if (parsed == null) {
             parsed = Collections.emptyMap();
         }
-        @Nullable JsonElement defaultReplacement = null;
-        Int2ObjectMap<JsonElement> replacements = new Int2ObjectArrayMap<>(parsed.size());
+        Int2ObjectMap<JsonElement> overrides = new Int2ObjectArrayMap<>(parsed.size());
         for (Entry<String, JsonElement> e : parsed.entrySet()) {
-            if ("*".equals(e.getKey())) {
-                if (defaultReplacement == null) {
-                    defaultReplacement = e.getValue();
-                } else throw new JsonParseException("Cannot have more than one wildcard override in ctm_overrides");
-            }
             try {
-                int index = Integer.parseInt(e.getKey());
-                replacements.put(index, e.getValue());
+                if ("default".equals(e.getKey())) {
+                    overrides.put(-1, e.getValue());
+                } else {
+                    int index = Integer.parseInt(e.getKey());
+                    if (index == -1) {
+                        throw new JsonParseException("Invalid tint index -1");
+                    }
+                    overrides.put(index, e.getValue());
+                }
             } catch (NumberFormatException ex) {}
         }
-        return new ModelCTM(modelinfo, vanillamodel, defaultReplacement, replacements);
+        return new ModelCTM(modelinfo, vanillamodel, overrides);
     }
 }
