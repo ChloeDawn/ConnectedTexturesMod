@@ -58,12 +58,18 @@ public class ModelCTM implements IModelCTM {
     private static final Gson GSON = new GsonBuilder().registerTypeAdapter(IMetadataSectionCTM.class, new IMetadataSectionCTM.Serializer()).create();
     protected final Int2ObjectMap<IMetadataSectionCTM> metaOverrides = new Int2ObjectArrayMap<>();
     private final ModelBlock modelinfo;
+
     // Populated from overrides data during construction
+    @Nullable private final JsonElement defaultOverride;
     private final Int2ObjectMap<JsonElement> overrides;
     private final Collection<ResourceLocation> textureDependencies;
+
     // Populated during bake with real texture data
+    @Nullable private TextureAtlasSprite defaultSpriteOverride;
     protected Int2ObjectMap<TextureAtlasSprite> spriteOverrides;
+    @Nullable private Pair<String, ICTMTexture<?>> defaultTextureOverride;
     protected Map<Pair<Integer, String>, ICTMTexture<?>> textureOverrides;
+
     private IModel vanillamodel;
     private transient byte layers;
 
@@ -77,8 +83,10 @@ public class ModelCTM implements IModelCTM {
         this.textureDependencies = new HashSet<>();
         this.textureDependencies.addAll(vanillamodel.getTextures());
 
+        this.defaultOverride = overrides.get(-1);
+
         for (Entry<Integer, JsonElement> e : this.overrides.entrySet()) {
-            IMetadataSectionCTM meta = getMetaFromOverride(e.getValue());
+            IMetadataSectionCTM meta = getMetadataFromElement(e.getValue());
             if (meta != null) {
                 metaOverrides.put(e.getKey(), meta);
                 textureDependencies.addAll(Arrays.asList(meta.getAdditionalTextures()));
@@ -96,6 +104,23 @@ public class ModelCTM implements IModelCTM {
                 }
             }
         }
+    }
+
+    private IMetadataSectionCTM getMetadataFromElement(JsonElement element) throws IOException {
+        IMetadataSectionCTM meta = null;
+        if (element.isJsonPrimitive() && element.getAsJsonPrimitive().isString()) {
+            ResourceLocation rl = new ResourceLocation(element.getAsString());
+            meta = ResourceUtil.getMetadata(ResourceUtil.spriteToAbsolute(rl));
+            textureDependencies.add(rl);
+        } else if (element.isJsonObject()) {
+            JsonObject obj = element.getAsJsonObject();
+            if (!obj.has("ctm_version")) {
+                // This model can only be version 1, TODO improve this
+                obj.add("ctm_version", new JsonPrimitive(1));
+            }
+            meta = GSON.fromJson(obj, IMetadataSectionCTM.class);
+        }
+        return meta;
     }
 
     private static ModelCTM retexture(ModelCTM current, ImmutableMap<String, String> textures) throws IOException {
@@ -136,24 +161,6 @@ public class ModelCTM implements IModelCTM {
             });
         }
         return ret;
-    }
-
-    @Nullable
-    private IMetadataSectionCTM getMetaFromOverride(JsonElement override) throws IOException {
-        IMetadataSectionCTM meta = null;
-        if (override.isJsonPrimitive() && override.getAsJsonPrimitive().isString()) {
-            ResourceLocation rl = new ResourceLocation(override.getAsString());
-            meta = ResourceUtil.getMetadata(ResourceUtil.spriteToAbsolute(rl));
-            textureDependencies.add(rl);
-        } else if (override.isJsonObject()) {
-            JsonObject obj = override.getAsJsonObject();
-            if (!obj.has("ctm_version")) {
-                // This model can only be version 1, TODO improve this
-                obj.add("ctm_version", new JsonPrimitive(1));
-            }
-            meta = GSON.fromJson(obj, IMetadataSectionCTM.class);
-        }
-        return meta;
     }
 
     @Override
@@ -200,17 +207,21 @@ public class ModelCTM implements IModelCTM {
     @Override
     @Nullable
     public TextureAtlasSprite getOverrideSprite(int tintIndex) {
-        if (tintIndex != -1) {
-            return spriteOverrides.getOrDefault(tintIndex, spriteOverrides.get(-1));
-        } else return spriteOverrides.get(-1);
+        if (tintIndex == -1 && defaultSpriteOverride != null) {
+            return defaultSpriteOverride;
+        }
+        return spriteOverrides.get(tintIndex);
     }
 
     @Override
     @Nullable
     public ICTMTexture<?> getOverrideTexture(int tintIndex, String sprite) {
-        if (tintIndex != -1) {
-            return textureOverrides.getOrDefault(Pair.of(tintIndex, sprite), textureOverrides.get(Pair.of(-1, sprite)));
-        } else return textureOverrides.get(Pair.of(tintIndex, sprite));
+        if (tintIndex == -1 && defaultTextureOverride != null) {
+            if (sprite.equals(defaultTextureOverride.getKey())) {
+                return defaultTextureOverride.getValue();
+            }
+        }
+        return textureOverrides.get(Pair.of(tintIndex, sprite));
     }
 
     @Override
@@ -249,10 +260,14 @@ public class ModelCTM implements IModelCTM {
             spriteOverrides = new Int2ObjectArrayMap<>();
             // Convert all primitive values into sprites
             for (Entry<Integer, JsonElement> e : overrides.entrySet()) {
-                if (e.getValue().isJsonPrimitive() && e.getValue().getAsJsonPrimitive().isString()) {
-                    TextureAtlasSprite sprite = bakedTextureGetter.apply(new ResourceLocation(e.getValue().getAsString()));
-                    spriteOverrides.put(e.getKey(), sprite);
+                JsonElement element = e.getValue();
+                if (element.isJsonPrimitive() && element.getAsJsonPrimitive().isString()) {
+                    TextureAtlasSprite sprite = bakedTextureGetter.apply(new ResourceLocation(element.getAsString()));
+                    if (e.getKey() != -1) {
+                        spriteOverrides.put(e.getKey(), sprite);
+                    } else defaultSpriteOverride = sprite;
                 }
+
             }
         }
         if (textureOverrides == null) {
@@ -272,7 +287,9 @@ public class ModelCTM implements IModelCTM {
                     }
                     ICTMTexture<?> tex = e.getValue().makeTexture(sprite, bakedTextureGetter);
                     layers |= 1 << (tex.getLayer() == null ? 7 : tex.getLayer().ordinal());
-                    textureOverrides.put(Pair.of(e.getKey(), texLoc.toString()), tex);
+                    if (e.getKey() != -1) {
+                        textureOverrides.put(Pair.of(e.getKey(), texLoc.toString()), tex);
+                    } else defaultTextureOverride = Pair.of(texLoc.toString(), tex);
                 }
             }
         }
