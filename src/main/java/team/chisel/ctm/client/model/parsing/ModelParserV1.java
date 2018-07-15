@@ -1,16 +1,9 @@
 package team.chisel.ctm.client.model.parsing;
 
-import java.util.Collections;
-import java.util.Map;
-import java.util.Map.Entry;
-
-import javax.annotation.Nonnull;
-
 import com.google.gson.Gson;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.reflect.TypeToken;
-
 import it.unimi.dsi.fastutil.ints.Int2ObjectArrayMap;
 import it.unimi.dsi.fastutil.ints.Int2ObjectMap;
 import lombok.SneakyThrows;
@@ -22,6 +15,12 @@ import net.minecraftforge.fml.relauncher.ReflectionHelper;
 import team.chisel.ctm.api.model.IModelCTM;
 import team.chisel.ctm.api.model.IModelParser;
 import team.chisel.ctm.client.model.ModelCTM;
+
+import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
+import java.util.Collections;
+import java.util.Map;
+import java.util.Map.Entry;
 
 @SuppressWarnings("unchecked")
 public class ModelParserV1 implements IModelParser {
@@ -50,13 +49,19 @@ public class ModelParserV1 implements IModelParser {
         if (parsed == null) {
             parsed = Collections.emptyMap();
         }
+        @Nullable JsonElement defaultReplacement = null;
         Int2ObjectMap<JsonElement> replacements = new Int2ObjectArrayMap<>(parsed.size());
         for (Entry<String, JsonElement> e : parsed.entrySet()) {
+            if ("*".equals(e.getKey())) {
+                if (defaultReplacement == null) {
+                    defaultReplacement = e.getValue();
+                } else throw new IllegalStateException("Cannot have more than one wildcard override in ctm_overrides");
+            }
             try {
                 int index = Integer.parseInt(e.getKey());
                 replacements.put(index, e.getValue());
             } catch (NumberFormatException ex) {}
         }
-        return new ModelCTM(modelinfo, vanillamodel, replacements);
+        return new ModelCTM(modelinfo, vanillamodel, defaultReplacement, replacements);
     }
 }
